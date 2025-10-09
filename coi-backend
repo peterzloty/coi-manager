@@ -1,0 +1,91 @@
+coiModel
+
+import pool from '../config/db.js';
+
+export default class CoiModel {
+  static async addPesel(pesel, status = 'zastrzeżony') {
+    const sql = 'INSERT INTO pesels (pesel, status) VALUES (?, ?)';
+    await pool.query(sql, [pesel, status]);
+  }
+
+  static async updateStatus(pesel, status) {
+    const sql = 'UPDATE pesels SET status = ? WHERE pesel = ?';
+    await pool.query(sql, [status, pesel]);
+  }
+
+  static async deletePesel(pesel) {
+    const sql = 'DELETE FROM pesels WHERE pesel = ?';
+    await pool.query(sql, [pesel]);
+  }
+
+  static async searchPesels(query = '') {
+    const sql = query
+      ? 'SELECT * FROM pesels WHERE pesel LIKE ?'
+      : 'SELECT * FROM pesels';
+    const params = query ? [`%${query}%`] : [];
+    const [rows] = await pool.query(sql, params);
+    return rows;
+  }
+}
+
+
+##COIController
+import CoiModel from '../models/coiModel.js';
+
+export default class CoiController {
+  static async addPesel(req, res) {
+    try {
+      const { pesel, status } = req.body;
+      await CoiModel.addPesel(pesel, status);
+      res.json({ message: 'Dodano PESEL' });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+
+  static async updateStatus(req, res) {
+    try {
+      const { pesel } = req.params;
+      const { status } = req.body;
+      await CoiModel.updateStatus(pesel, status);
+      res.json({ message: 'Zmieniono status' });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+
+  static async deletePesel(req, res) {
+    try {
+      const { pesel } = req.params;
+      await CoiModel.deletePesel(pesel);
+      res.json({ message: 'Usunięto PESEL' });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+
+  static async searchPesels(req, res) {
+    try {
+      const query = req.query.q || '';
+      const results = await CoiModel.searchPesels(query);
+      res.json(results);
+    } catch (err) {
+      res.status(400).json({ error: err.message });
+    }
+  }
+}
+
+
+
+##COiRoutes
+import { Router } from 'express';
+import CoiController from '../controllers/coiController.js';
+
+const router = Router();
+
+router.post('/', CoiController.addPesel);
+router.put('/:pesel', CoiController.updateStatus);
+router.delete('/:pesel', CoiController.deletePesel);
+router.get('/', CoiController.searchPesels);
+
+export default router;
