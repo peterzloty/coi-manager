@@ -1,0 +1,160 @@
+import 'dotenv/config';
+import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { searchPesels, addPesel, deletePesel, checkPeselExists } from '../../models/coiModel.js';
+
+describe('Model COI: INSERT i DELETE', () => {
+  // Testowy PESEL z poprawną sumą kontrolną
+  const testPesel = '44051401458';
+  const testStatus = 'testowy';
+
+  // Cleanup przed testami
+  beforeAll(async () => {
+    try {
+      await deletePesel(testPesel);
+      console.log('🧹 Cleanup: Usunięto testowy PESEL jeśli istniał');
+    } catch (err) {
+      console.log('🧹 Cleanup: PESEL nie istniał (OK)');
+    }
+  });
+
+  // Cleanup po testach
+  afterAll(async () => {
+    try {
+      await deletePesel(testPesel);
+      console.log('🧹 Cleanup końcowy: Usunięto testowy PESEL');
+    } catch (err) {
+      console.log('🧹 Cleanup końcowy zakończony');
+    }
+  });
+
+  // Test 1: Dodawanie PESEL
+  it('powinien dodać nowy PESEL do bazy', async () => {
+    // Act - Dodaj PESEL
+    const id = await addPesel(testPesel, testStatus);
+
+    // Assert - Sprawdź czy zwrócono ID
+    expect(id).toBeDefined();
+    expect(typeof id).toBe('number');
+    expect(id).toBeGreaterThan(0);
+
+    // Verify - Sprawdź czy PESEL faktycznie jest w bazie
+    const results = await searchPesels(testPesel);
+    expect(results).toHaveLength(1);
+    expect(String(results[0].pesel)).toBe(testPesel);
+    expect(results[0].status).toBe(testStatus);
+  });
+
+  // Test 2: Próba dodania duplikatu (powinien rzucić błąd)
+  it('nie powinien dodać tego samego PESEL dwukrotnie', async () => {
+    // Arrange - PESEL już istnieje z poprzedniego testu
+
+    // Act & Assert - Próba dodania ponownie
+    await expect(addPesel(testPesel, testStatus)).rejects.toThrow();
+  });
+
+  // Test 3: Sprawdzenie czy PESEL istnieje
+  it('powinien sprawdzić czy PESEL istnieje w bazie', async () => {
+    // Act
+    const exists = await checkPeselExists(testPesel);
+
+    // Assert
+    expect(exists).toBeDefined();
+    expect(exists).toHaveProperty('pesel');
+    expect(String(exists.pesel)).toBe(testPesel);
+    expect(exists.status).toBe(testStatus);
+  });
+
+  // Test 4: Usuwanie PESEL
+  it('powinien usunąć PESEL z bazy', async () => {
+    // Act - Usuń PESEL
+    const deleted = await deletePesel(testPesel);
+
+    // Assert - Sprawdź czy funkcja zwróciła true
+    expect(deleted).toBe(true);
+
+    // Verify - Sprawdź czy PESEL faktycznie został usunięty
+    const results = await searchPesels(testPesel);
+    expect(results).toHaveLength(0);
+  });
+
+  // Test 5: Próba usunięcia nieistniejącego PESEL
+  it('powinien zwrócić false przy usuwaniu nieistniejącego PESEL', async () => {
+    // Act - Usuń nieistniejący PESEL
+    const deleted = await deletePesel('99999999999');
+
+    // Assert
+    expect(deleted).toBe(false);
+  });
+
+  // Test 6: Cykl życia PESEL (INSERT -> CHECK -> DELETE)
+  it('powinien przejść pełny cykl życia PESEL', async () => {
+    const cyclePesel = '85020298765';
+    
+    // 1. Usuń jeśli istnieje
+    await deletePesel(cyclePesel);
+
+    // 2. Dodaj
+    const id = await addPesel(cyclePesel, 'cykl_testowy');
+    expect(id).toBeGreaterThan(0);
+
+    // 3. Sprawdź czy istnieje
+    const exists = await checkPeselExists(cyclePesel);
+    expect(exists).toBeDefined();
+    expect(String(exists.pesel)).toBe(cyclePesel);
+
+    // 4. Znajdź przez wyszukiwanie
+    const found = await searchPesels(cyclePesel);
+    expect(found).toHaveLength(1);
+
+    // 5. Usuń
+    const deleted = await deletePesel(cyclePesel);
+    expect(deleted).toBe(true);
+
+    // 6. Sprawdź czy nie ma w bazie
+    const afterDelete = await searchPesels(cyclePesel);
+    expect(afterDelete).toHaveLength(0);
+  });
+
+  // Test 7: Dodawanie z różnymi statusami
+  it('powinien dodać PESEL z różnymi statusami', async () => {
+    const peselA = '92030387654';
+    const peselB = '88112209876';
+
+    // Cleanup
+    await deletePesel(peselA);
+    await deletePesel(peselB);
+
+    // Dodaj z różnymi statusami
+    await addPesel(peselA, 'zastrzeżony');
+    await addPesel(peselB, 'aktywny');
+
+    // Sprawdź
+    const resultA = await checkPeselExists(peselA);
+    const resultB = await checkPeselExists(peselB);
+
+    expect(resultA.status).toBe('zastrzeżony');
+    expect(resultB.status).toBe('aktywny');
+
+    // Cleanup
+    await deletePesel(peselA);
+    await deletePesel(peselB);
+  });
+
+  // Test 8: Domyślny status
+  it('powinien użyć domyślnego statusu jeśli nie podano', async () => {
+    const peselDefault = '77010112345';
+
+    // Cleanup
+    await deletePesel(peselDefault);
+
+    // Dodaj bez statusu (użyje domyślnego)
+    await addPesel(peselDefault);
+
+    // Sprawdź
+    const result = await checkPeselExists(peselDefault);
+    expect(result.status).toBe('zastrzeżony');  // lub twój domyślny status
+
+    // Cleanup
+    await deletePesel(peselDefault);
+  });
+});
